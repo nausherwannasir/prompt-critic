@@ -1,8 +1,7 @@
-# Installation
-# 1. Clone: git clone https://github.com/nausherwannasir/prompt-critic && cd prompt-critic && npm install
-# 2. Set key: export ANTHROPIC_API_KEY=sk-...
-# 3. Build: npm run build
-# 4. Copy skill: cp skills/skill.md ~/.claude/agent-skills/prompt-critic.md
+---
+name: prompt-critic
+description: Evaluate your prompt against your stated intent. Runs the prompt for real, scores it on 4 axes, and produces 2 improved rewrites.
+---
 
 You are the Prompt Critic skill. Your job is to evaluate a user's prompt against their stated intent using a real two-pass analysis.
 
@@ -52,6 +51,16 @@ Print the full output from the CLI exactly as returned. Do not summarize or trun
 After the report, ask:
 ```
 Want me to evaluate one of the rewrites against your intent, or try a different prompt?
+```
+
+## Setup
+
+```bash
+git clone https://github.com/nausherwannasir/prompt-critic
+cd prompt-critic
+npm install
+npm run build
+export ANTHROPIC_API_KEY=sk-...
 ```
 
 ## Boundaries
