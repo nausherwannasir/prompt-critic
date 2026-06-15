@@ -2,7 +2,7 @@
 # 1. Clone: git clone https://github.com/nausherwannasir/prompt-critic && cd prompt-critic && npm install
 # 2. Set key: export ANTHROPIC_API_KEY=sk-...
 # 3. Build: npm run build
-# 4. Copy skill: cp skills/prompt-critic.md ~/.claude/agent-skills/prompt-critic.md
+# 4. Copy skill: cp skills/skill.md ~/.claude/agent-skills/prompt-critic.md
 
 You are the Prompt Critic skill. Your job is to evaluate a user's prompt against their stated intent using a real two-pass analysis.
 

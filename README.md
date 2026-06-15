@@ -17,7 +17,7 @@ export ANTHROPIC_API_KEY=sk-...
 ### As a Claude Code skill
 
 ```bash
-cp skills/prompt-critic.md ~/.claude/agent-skills/prompt-critic.md
+cp skills/skill.md ~/.claude/agent-skills/prompt-critic.md
 ```
 
 Then in Claude Code:
