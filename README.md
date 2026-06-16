@@ -1,88 +1,66 @@
 # prompt-critic
 
-Evaluate your prompt against your intent before you commit to it.
+Evaluate a prompt against your intent before you commit to it — fully inside Claude, no setup.
 
-Uses a two-pass approach: first runs your prompt against Claude to get the real output, then critiques both the prompt and output against your stated intent — scoring four axes and producing two improved rewrites.
+It runs your prompt for real to get the actual output, then critiques both the prompt and that output against your stated intent: scoring five axes (including **token economy**) and producing two leaner, stronger rewrites. Because Claude is the model the prompt would run against, both passes happen in a single conversation turn — no clone, no build, no API key, no separate CLI calls.
 
-## Quick start
+## Install
 
-```bash
-git clone https://github.com/nausherwannasir/prompt-critic
-cd prompt-critic
-npm install
-npm run build
-export ANTHROPIC_API_KEY=sk-...
-```
-
-### As a Claude Code skill
+Copy the skill into your Claude skills directory:
 
 ```bash
-cp SKILL.md ~/.claude/agent-skills/prompt-critic.md
+cp SKILL.md ~/.claude/skills/prompt-critic/SKILL.md
 ```
 
-Then in Claude Code:
+(or wherever your Claude Code skills live). That's the whole install.
+
+## Use
+
+In Claude:
+
 ```
 /prompt-critic
 ```
 
-### As a CLI
+Give it your intent and your prompt — or pass both at once:
 
-```bash
-npx prompt-critic --intent "summarize a legal doc for a non-lawyer" --prompt "Summarize this document."
+```
+/prompt-critic
+intent:  summarize a legal doc for a non-lawyer
+prompt:  Summarize this document.
 ```
 
-Output:
+You get back the real preview output, per-axis scores, a concrete analysis of every weak axis, and two rewrites:
+
 ```
 ─────────────────────────────────────────────────
  PROMPT CRITIC REPORT
 ─────────────────────────────────────────────────
- INTENT
- "summarize a legal doc for a non-lawyer"
+ INTENT       "summarize a legal doc for a non-lawyer"
+ YOUR PROMPT  "Summarize this document."
 
- YOUR PROMPT
- "Summarize this document."
-
-─────────────────────────────────────────────────
  PREVIEW  (what the model actually produces)
-─────────────────────────────────────────────────
-[real model output]
+ [real model output]
 
-─────────────────────────────────────────────────
  SCORES
-─────────────────────────────────────────────────
  Clarity & Specificity    2/5  ██░░░
  Intent Alignment         1/5  █░░░░
  Output Format Guidance   1/5  █░░░░
  Robustness               2/5  ██░░░
+ Token Economy            3/5  ███░░
  ─────────────────────────────────
- Overall                  1.5/5
-...
+ Overall                  1.8/5
+ ...
 ```
-
-## Options
-
-| Flag | Description |
-|------|-------------|
-| `--intent` | What you actually want to accomplish (required) |
-| `--prompt` | The prompt to evaluate (required) |
-| `--model` | Claude model for preview pass (default: `claude-sonnet-4-6`) |
-| `--json` | Output raw JSON instead of formatted report |
 
 ## Scoring axes
 
 | Axis | What it measures |
-|------|-----------------|
-| Clarity & Specificity | Unambiguous? Enough detail? |
-| Intent Alignment | Does it ask for what you meant? |
+|------|------------------|
+| Clarity & Specificity | Unambiguous? Enough detail to act without guessing? |
+| Intent Alignment | Does it ask for what you actually meant? |
 | Output Format Guidance | Specifies length, structure, tone? |
-| Robustness | Consistent across runs? |
+| Robustness | Consistent across runs and inputs? |
+| Token Economy | Does every token earn its place, or is it padded? |
 
-Scores are integers 1–5. Overall is the average, one decimal.
-
-## Development
-
-```bash
-npm test                  # unit tests only (no API calls)
-npm run test:integration  # includes real API calls (requires ANTHROPIC_API_KEY)
-npm run build             # compile TypeScript to dist/
-```
+Scores are integers 1–5; overall is the average, one decimal. The two rewrites are held to the same token-economy bar they're scored on.
