@@ -2,55 +2,43 @@
 
 ## 1. Objective
 
-A Claude Code skill and TypeScript CLI tool that evaluates a prompt against the user's stated intent using a **two-pass approach**:
+A self-contained Claude skill that evaluates a prompt against the user's stated intent using a **two-pass approach that Claude runs itself, in one conversation turn**:
 
-1. **Preview pass** — run the prompt against Claude to get a real, ground-truth output
-2. **Critique pass** — score the prompt and output against the intent across four axes, identify mismatches, and produce improved rewrites
+1. **Preview pass** — Claude responds to the prompt exactly as written to get a real, ground-truth output.
+2. **Critique pass** — Claude scores the prompt and output against the intent across five axes, identifies mismatches, and produces two improved rewrites.
+
+Claude is the model the prompt would run against, so there is no external tool and no second API call: the user is already talking to the model that can do both passes. That keeps the whole flow on the fewest tokens possible.
 
 **Target users**: everyone — developers, prompt engineers, and general Claude users who want to know whether their prompt will actually do what they mean before they commit to it.
 
 ---
 
-## 2. Commands & Invocation
-
-### Skill invocation (conversational)
+## 2. Invocation
 
 ```
 /prompt-critic
 ```
 
-Claude prompts the user for two things inline:
+Claude needs two inputs — the **intent** (what the user wants to accomplish) and the **prompt** (the text to evaluate). It accepts them inline:
 
 ```
 What's your intent? (what you actually want to accomplish)
 > ...
 
-What's your prompt? (what you wrote or plan to write)
+What's your prompt? (what you wrote or plan to send)
 > ...
 ```
 
-The skill then runs the two-pass evaluation and prints a structured report.
-
-### CLI invocation (for scripting / CI use)
-
-```bash
-npx prompt-critic --intent "..." --prompt "..."
-```
-
-Flags:
-- `--intent` (required) — the goal in plain English
-- `--prompt` (required) — the prompt text to evaluate
-- `--model` (optional, default: `claude-sonnet-4-6`) — model to use for the preview pass
-- `--json` (optional) — output raw JSON instead of formatted report
+If the user supplies both in the invoking message (in any format), Claude parses them out without re-asking. If the intent is fewer than 5 words, Claude asks for a more specific one first. If the prompt looks like a system prompt ("You are…"), Claude asks whether to evaluate a user turn against it too.
 
 ---
 
 ## 3. Evaluation Report Format
 
 ```
-─────────────────────────────────────────
+─────────────────────────────────────────────────
  PROMPT CRITIC REPORT
-─────────────────────────────────────────
+─────────────────────────────────────────────────
 
  INTENT
  "summarize a legal document for a non-lawyer"
@@ -58,42 +46,43 @@ Flags:
  YOUR PROMPT
  "Summarize this document."
 
-─────────────────────────────────────────
- PREVIEW (what the model actually produces)
-─────────────────────────────────────────
+─────────────────────────────────────────────────
+ PREVIEW  (what the model actually produces)
+─────────────────────────────────────────────────
  [real model output from running the prompt]
 
-─────────────────────────────────────────
+─────────────────────────────────────────────────
  SCORES
-─────────────────────────────────────────
+─────────────────────────────────────────────────
  Clarity & Specificity    2/5  ██░░░
  Intent Alignment         1/5  █░░░░
  Output Format Guidance   1/5  █░░░░
  Robustness               2/5  ██░░░
- ─────────────────────────
- Overall                  1.5/5
+ Token Economy            3/5  ███░░
+ ─────────────────────────────────
+ Overall                  1.8/5
 
-─────────────────────────────────────────
+─────────────────────────────────────────────────
  ANALYSIS
-─────────────────────────────────────────
+─────────────────────────────────────────────────
  ✗ Clarity: "Summarize" gives the model no cues about depth, length, or audience.
  ✗ Intent alignment: The prompt never mentions the audience (non-lawyer) — the model
    produced legal jargon instead of plain language.
  ✗ Format: No output structure requested (bullets, length, sections).
- ~ Robustness: Will produce wildly different results across runs with no anchors.
+ ✗ Robustness: Will produce wildly different results across runs with no anchors.
+ ~ Token economy: Terse, but the few tokens it spends don't actually accomplish the
+   intent — brevity here is under-specification, not efficiency.
 
-─────────────────────────────────────────
+─────────────────────────────────────────────────
  REWRITES
-─────────────────────────────────────────
- [1] Summarize the following legal document in plain English for someone with no
-     legal background. Use bullet points. Highlight any deadlines, obligations, or
-     rights the reader should be aware of. Keep it under 300 words.
+─────────────────────────────────────────────────
+ [1] Summarize the legal document below in plain English for a non-lawyer. Use bullet
+     points, under 300 words. Flag any deadlines, obligations, or rights.
 
- [2] You are a plain-language translator. Read the legal document below and explain
-     what it means to a non-lawyer in simple terms. Avoid jargon. Use short
-     paragraphs. Focus on: what this agreement requires, what it restricts, and
-     any important dates or penalties.
-─────────────────────────────────────────
+ [2] You are a plain-language translator. Explain what the legal document below means
+     to a non-lawyer — no jargon, short paragraphs. Cover: what it requires, what it
+     restricts, and any important dates or penalties.
+─────────────────────────────────────────────────
 ```
 
 ---
@@ -120,7 +109,9 @@ Each axis is scored 1–5. Scores are integers.
 
 **Robustness** — Will the prompt produce consistent results across multiple runs and across slightly different inputs? Penalize ambiguity that would cause high variance.
 
-**Overall** = average of the four axes, rounded to one decimal.
+**Token Economy** — Does every token earn its place? Penalize padding, politeness theater, restated instructions, and over-specification that doesn't change the output. Lean *and* complete scores high; bloated scores low. Clarity and Token Economy pull against each other only if you let them — the target is maximum signal per token, where every token adds clarity and none is wasted.
+
+**Overall** = average of the five axes, rounded to one decimal. The overall can't exceed what the weakest axis would justify.
 
 ---
 
@@ -128,96 +119,50 @@ Each axis is scored 1–5. Scores are integers.
 
 ```
 prompt-critic/
-├── skills/
-│   └── prompt-critic.md       ← Claude Code skill file
-├── src/
-│   ├── types.ts               ← shared types (EvalInput, EvalResult, Score)
-│   ├── preview.ts             ← pass 1: run prompt, return raw output
-│   ├── critique.ts            ← pass 2: score + mismatch analysis + rewrites
-│   ├── evaluate.ts            ← orchestrates both passes
-│   ├── format.ts              ← formats EvalResult into human-readable report
-│   └── cli.ts                 ← CLI entrypoint (parses args, calls evaluate, prints)
-├── tests/
-│   ├── preview.test.ts
-│   ├── critique.test.ts
-│   ├── evaluate.test.ts
-│   └── format.test.ts
-├── fixtures/
-│   └── cases.ts               ← known intent/prompt pairs with expected score ranges
-├── SPEC.md
-├── README.md
-├── package.json
-└── tsconfig.json
+├── SKILL.md      ← the self-contained skill (runs both passes itself)
+├── README.md     ← install + usage
+├── SPEC.md       ← this document
+└── .gitignore
 ```
 
----
-
-## 6. Tech Stack
-
-- **Runtime**: Node.js 20+
-- **Language**: TypeScript (strict mode)
-- **AI**: `@anthropic-ai/sdk` — `claude-sonnet-4-6` for both passes
-- **Testing**: Vitest
-- **CLI parsing**: `minimist` (lightweight, no framework)
-- **No build step for tests** — Vitest runs TypeScript natively via `--reporter=verbose`
+There is no source tree, build step, or dependency: the skill is a single Markdown file Claude executes directly.
 
 ---
 
-## 7. Code Style
+## 6. Rewrite Goal
 
-- Strict TypeScript — no `any`, explicit return types on all exported functions
-- No comments unless the WHY is non-obvious
-- Small, single-purpose functions — each file does one thing
-- `EvalInput`, `EvalResult`, `Score` are the only shared data structures — no ad-hoc objects
-- Errors surface as thrown `Error` with a descriptive message; no silent swallowing
-- No retries, no fallbacks — if the API call fails, throw
+Both rewrites must (a) directly address the weaknesses found and (b) be **token-economical** — say everything the intent needs in as few tokens as possible. Both rewrites should be usable as-is. A rewrite that is stronger but flabby is a failure; rewrites are held to the same Token Economy bar they're scored on.
 
 ---
 
-## 8. Testing Strategy
-
-- **Unit tests** (no API calls): scoring logic in `critique.ts`, formatting in `format.ts`
-- **Integration tests** (real API calls, marked `// integration`): `preview.ts`, `evaluate.ts` end-to-end
-- **Fixture-based**: `fixtures/cases.ts` defines known poor/good prompt pairs; integration tests assert score ranges (not exact values, since LLM output varies)
-- Tests run with `npm test` (unit only by default); `npm run test:integration` adds real API calls
-- No mocking of the Anthropic client in unit tests — instead, test pure functions that don't call the API
-
----
-
-## 9. Boundaries
+## 7. Boundaries
 
 | Category | Rule |
 |----------|------|
 | Always | Show the raw preview output before the analysis |
-| Always | Produce exactly 2 rewrites |
-| Always | Show per-axis scores AND overall |
-| Always | Explain each low score with a concrete reason |
+| Always | Run the preview pass for real before scoring — the critique must be grounded in actual output |
+| Always | Produce exactly 2 rewrites, both token-economical |
+| Always | Show all five per-axis scores AND the overall |
+| Always | Explain each below-4 score with a concrete reason tied to the preview |
 | Ask first | If the intent is empty or fewer than 5 words |
-| Ask first | If the prompt appears to be a system prompt (starts with "You are") — ask if they want the user-turn evaluated too |
+| Ask first | If the prompt appears to be a system prompt (starts with "You are") — whether to also evaluate a user turn |
 | Never | Silently modify the user's prompt |
-| Never | Use a model other than Claude for either pass |
-| Never | Skip the preview pass — the critique must be grounded in real output |
-| Never | Score higher than the weakest axis would support |
+| Never | Skip the preview pass |
+| Never | Score an axis higher than the preview evidence supports |
+| Never | Let the overall exceed what the weakest axis would justify |
 
 ---
 
-## 10. Installation (for users)
+## 8. Installation
 
 ```bash
-# Clone the repo
-git clone https://github.com/nausherwannasir/prompt-critic
-cd prompt-critic
-npm install
-
-# Add the skill to Claude Code
-cp skills/prompt-critic.md ~/.claude/agent-skills/
-
-# Set your API key
-export ANTHROPIC_API_KEY=sk-...
-
-# Use as a skill
-/prompt-critic
-
-# Or use the CLI directly
-npx prompt-critic --intent "..." --prompt "..."
+cp SKILL.md ~/.claude/skills/prompt-critic/SKILL.md
 ```
+
+Then invoke it in Claude:
+
+```
+/prompt-critic
+```
+
+No clone, no build, no API key.
